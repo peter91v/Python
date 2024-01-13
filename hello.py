@@ -46,6 +46,7 @@ print(f"ShortName: {sen2.ShortName}")
 print(f"SensorId: {sen2.SensorId}")
 print(f"Temperature: {sen2.TEMPERATURE}")
 
+print(f"Temperature: {sen2.TEMPERATURE}")
 sen2.Text = "Heizraum Kaltwasser test"
 sen2.save()
 # (601,"Test","Test","102563", "2023-12-08", "17:34:11",19.45)
