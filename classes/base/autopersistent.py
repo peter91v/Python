@@ -6,16 +6,9 @@ import inspect
 
 
 class AutoPersistentController(DatabaseController):
-    def __init__(self, db_connection):
-        super().__init__(
-            db_connection.connection._host,
-            db_connection.connection.user,
-            db_connection.connection._password,
-            db_connection.connection.database,
-        )
-        self.connection = db_connection.connection  # Verbindung speichern
-        self.db_conn = db_connection
-        self.connect()
+    def __init__(self):
+        if not self.connection.is_connected:
+            self.connect()
 
     def create_table(self):
         cursor = self.connection.cursor()
@@ -46,10 +39,7 @@ class AutoPersistentController(DatabaseController):
 
         if existing_entry:
             # Eintrag existiert bereits, daher ein UPDATE durchführen
-            columns = inspect.getmembers(
-                self.__class__, lambda x: isinstance(x, property)
-            )
-            columns = [c[0] for c in columns]
+            columns = self.getColumns()
             set_clause = ", ".join(
                 [f"{col} = %s" for col in columns if col != primary_key]
             )
@@ -62,23 +52,15 @@ class AutoPersistentController(DatabaseController):
             except mysql.connector.Error as e:
                 print(f"Fehler bei der Update: {e}")
                 return None
-            finally:
-                self.cursor.close()
         else:
             # Eintrag existiert nicht, daher ein INSERT durchführen
-            columns = inspect.getmembers(
-                self.__class__, lambda x: isinstance(x, property)
-            )
-            columns = [c[0] for c in columns]
+            columns = self.getColumns()
             values = [getattr(self, c) for c in columns]
-            self.insert_data(table_name, columns, values)
             try:
                 self.insert_data(table_name, columns, values)
             except mysql.connector.Error as e:
                 print(f"Fehler bei der Insert: {e}")
                 return None
-            finally:
-                self.cursor.close()
 
     def key(self, var):
         return str(var)
@@ -88,7 +70,9 @@ class AutoPersistentController(DatabaseController):
         query = f"SHOW KEYS FROM {table} WHERE Key_name = 'PRIMARY'"
         result = self.fetch_data(query)
         if result:
-            primary_key_column = result[0][4]  # Spaltenname des Primärschlüssels
+            primary_key_column = result[0][
+                "Column_name"
+            ]  # Spaltenname des Primärschlüssels
             return primary_key_column
         else:
             return None
@@ -104,52 +88,21 @@ class AutoPersistentController(DatabaseController):
             print(f"Error: Primary key not found for table {table_name}")
             return None
 
-        cursor = self.connection.cursor()
-        load_sql = f"SELECT * FROM {table_name} WHERE {primary_key} = %s"
-        cursor.execute(load_sql, (id,))
-        row = cursor.fetchone()
-        cursor.close()  # Schließe den Cursor nach der Abfrage
-        if row is None:
+        columns = "*"  # Alle Spalten auswählen
+        where_clause = f"{primary_key} = %s"
+        params = (id,)
+        rows = self.select_data(table_name, columns, where_clause, params)
+
+        if not rows:
+            print(f"Error: No entry with ID {id} found in table {table_name}")
             return None
 
-        columns = cursor.description  # Spalteninformationen abrufen
-        column_names = [col[0] for col in columns]
-        values = row[0:]
-
-        instance = self.__class__(db_connection=self.db_conn)
-        for col_name, col_value in zip(column_names, values):
+        row = rows[0]
+        instance = self.__class__()
+        for col_name, col_value in row.items():
             setattr(instance, col_name, col_value)
 
         return instance
-
-        # if not self.connection:
-        #     print(f"Error: No database connection for class {self.__class__.__name__}")
-        #     return None
-
-        # table_name = self.__class__.__name__.lower()
-        # primary_key = self.get_primary_key(table_name)
-        # if not primary_key:
-        #     print(f"Error: Primary key not found for table {table_name}")
-        #     return None
-
-        # columns = "*"  # Alle Spalten auswählen
-        # where_clause = f"{primary_key} = %s"
-        # params = (id,)
-        # rows = self.select_data(table_name, columns, where_clause, params)
-
-        # if not rows:
-        #     print(f"Error: No entry with ID {id} found in table {table_name}")
-        #     return None
-
-        # row = rows[0]
-        # column_names = [col[0] for col in row]
-        # values = row[1:]
-
-        # instance = self.__class__(db_connection=self.db_conn)
-        # for col_name, col_value in zip(column_names, values):
-        #     setattr(instance, col_name, col_value)
-
-        # return instance
 
     def delete_data_by_id(self, table, id_value):
         primary_key = self.get_primary_key(table)
@@ -173,3 +126,7 @@ class AutoPersistentController(DatabaseController):
             print(f"Record with {primary_key}={id_value} deleted.")
         else:
             print(f"Error: {primary_key} attribute not set for the instance.")
+
+    def getColumns(self):
+        columns = inspect.getmembers(self.__class__, lambda x: isinstance(x, property))
+        return [c[0] for c in columns]

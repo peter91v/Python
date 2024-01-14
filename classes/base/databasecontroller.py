@@ -11,7 +11,6 @@ class DatabaseController:
         self.connection = None
         self.cursor = None
         self.db_connection = None
-        self.connect()
 
     def connect(self):
         try:
@@ -38,27 +37,34 @@ class DatabaseController:
 
     def execute_query(self, query, params=None):
         try:
-            if params:
-                self.cursor.execute(query, params)
-            else:
-                self.cursor.execute(query)
-            self.connection.commit()
-            print("Abfrage erfolgreich ausgeführt")
+            with self.connection.cursor() as cursor:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                self.connection.commit()
+                print("Abfrage erfolgreich ausgeführt")
         except mysql.connector.Error as e:
             print(f"Fehler beim Ausführen der Abfrage: {e}")
             self.connection.rollback()
+        finally:
+            cursor.close()
 
     def fetch_data(self, query, params=None):
+        rows = None
         try:
-            if params:
-                self.cursor.execute(query, params)
-            else:
-                self.cursor.execute(query)
-            rows = self.cursor.fetchall()
+            with self.connection.cursor(dictionary=True) as cursor:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                rows = cursor.fetchall()
             return rows
         except mysql.connector.Error as e:
             print(f"Fehler beim Abrufen der Daten: {e}")
             return None
+        finally:
+            cursor.close()
 
     def select_data(self, table, columns="*", where_clause=None, params=None):
         query = f"SELECT {columns} FROM {table}"

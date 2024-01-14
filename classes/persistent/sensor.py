@@ -16,7 +16,6 @@ class Sensors(AutoPersistentController):
         Date: dt.date = None,
         time: dt.time = None,
         Temperature: float = None,
-        db_connection=None,
     ):
         self._DATE = Date
         self._SensorId = SensorId
@@ -25,9 +24,6 @@ class Sensors(AutoPersistentController):
         self._TEMPERATURE = Temperature
         self._Text = Text
         self._time = time
-        self.db_connection = db_connection
-        self.connection = db_connection.connection  # Aktualisierte Zeile
-        super().__init__(db_connection)
 
     def klass_name(self):
         return self.__class__.__name__.lower()
