@@ -33,51 +33,52 @@ class AutoPersistentController(DatabaseController):
             print(f"Error: No database connection for class {self.__class__.__name__}")
             return None
 
-        # table_name = self.__class__.__name__.lower()
-        # primary_key = self.get_primary_key(table_name)
-        # if not primary_key:
-        #     print(f"Error: Primary key not found for table {table_name}")
-        #     return None
-
-        # # Überprüfen, ob der Eintrag bereits in der Datenbank vorhanden ist
-        # where_clause = f"{primary_key} = %s"
-        # params = (getattr(self, primary_key),)
-        # existing_entry = self.select_data(table_name, "*", where_clause, params)
-
-        # if existing_entry:
-        #     # Eintrag existiert bereits, daher ein UPDATE durchführen
-        #     set_clause = ", ".join(
-        #         [f"{col} = %s" for col in self.__dict__.keys() if col != primary_key]
-        #     )
-        #     update_params = [
-        #         getattr(self, col) for col in self.__dict__.keys() if col != primary_key
-        #     ]
-        #     update_params.append(getattr(self, primary_key))
-        #     self.update_data(table_name, set_clause, where_clause, update_params)
-        # else:
-        #     # Eintrag existiert nicht, daher ein INSERT durchführen
-        #     columns = ", ".join(self.__dict__.keys())
-        #     values = ", ".join(["%s" for _ in self.__dict__.keys()])
-        #     insert_params = [getattr(self, col) for col in self.__dict__.keys()]
-        #     self.insert_data(table_name, columns, values)
-
-        cursor = self.connection.cursor()
         table_name = self.__class__.__name__.lower()
-        columns = inspect.getmembers(self.__class__, lambda x: isinstance(x, property))
-        columns = [c[0] for c in columns]
-        values = [getattr(self, c) for c in columns]
-        values_str = ", ".join(["%s" for _ in columns])
-        save_sql = (
-            f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values_str})"
-        )
-        try:
-            cursor.execute(save_sql, values)
-            self.connection.commit()
-        except mysql.connector.Error as e:
-            print(f"Fehler bei der Verbindung zur Datenbank: {e}")
+        primary_key = self.get_primary_key(table_name)
+        if not primary_key:
+            print(f"Error: Primary key not found for table {table_name}")
             return None
-        finally:
-            cursor.close()
+
+        # Überprüfen, ob der Eintrag bereits in der Datenbank vorhanden ist
+        where_clause = f"{primary_key} = %s"
+        params = (getattr(self, primary_key),)
+        existing_entry = self.select_data(table_name, "*", where_clause, params)
+
+        if existing_entry:
+            # Eintrag existiert bereits, daher ein UPDATE durchführen
+            columns = inspect.getmembers(
+                self.__class__, lambda x: isinstance(x, property)
+            )
+            columns = [c[0] for c in columns]
+            set_clause = ", ".join(
+                [f"{col} = %s" for col in columns if col != primary_key]
+            )
+            update_params = [
+                getattr(self, col) for col in columns if col != primary_key
+            ]
+            update_params.append(getattr(self, primary_key))
+            try:
+                self.update_data(table_name, set_clause, where_clause, update_params)
+            except mysql.connector.Error as e:
+                print(f"Fehler bei der Update: {e}")
+                return None
+            finally:
+                self.cursor.close()
+        else:
+            # Eintrag existiert nicht, daher ein INSERT durchführen
+            columns = inspect.getmembers(
+                self.__class__, lambda x: isinstance(x, property)
+            )
+            columns = [c[0] for c in columns]
+            values = [getattr(self, c) for c in columns]
+            self.insert_data(table_name, columns, values)
+            try:
+                self.insert_data(table_name, columns, values)
+            except mysql.connector.Error as e:
+                print(f"Fehler bei der Insert: {e}")
+                return None
+            finally:
+                self.cursor.close()
 
     def key(self, var):
         return str(var)
