@@ -87,3 +87,21 @@ class DatabaseController:
         if where_clause:
             query += f" WHERE {where_clause}"
         self.execute_query(query, params)
+
+    def get_columns(self, table_name, data_type=False):
+        if data_type:
+            result = self.select_data(
+                "INFORMATION_SCHEMA.COLUMNS",
+                "COLUMN_NAME, DATA_TYPE",
+                f"TABLE_NAME='{table_name}'",
+            )
+        else:
+            result = self.select_data(
+                "INFORMATION_SCHEMA.COLUMNS",
+                "COLUMN_NAME",
+                f"TABLE_NAME='{table_name}'",
+            )
+        if result:
+            return result
+        else:
+            return None
